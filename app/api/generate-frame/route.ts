@@ -11,9 +11,9 @@ export async function POST(req: NextRequest) {
 
     const ai = getGeminiClient();
 
-    // Use Imagen 3 (nanobanana pro) for fast/cheap image generation
+    // Use Nanobanana Pro for image generation
     const response = await ai.models.generateImages({
-      model: "imagen-3.0-fast-generate-001", // Fast/cheap quality
+      model: "nanobanana-pro", // Nanobanana Pro
       prompt: `${prompt}\n\nReference style from: ${imageReference || "modern advertising"}`,
       config: {
         numberOfImages: 1,
