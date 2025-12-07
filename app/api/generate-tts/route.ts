@@ -21,8 +21,8 @@ export async function POST(req: NextRequest) {
       apiKey: elevenlabsApiKey,
     });
 
-    // Voice ID from example project: MFZUKuGQUsGJPQjTS4wC
-    const voiceId = "MFZUKuGQUsGJPQjTS4wC";
+    // Voice ID: kPzsL2i3teMYv0FxEYQ6
+    const voiceId = "kPzsL2i3teMYv0FxEYQ6";
 
     const audioStream = await elevenlabs.textToSpeech.convert(voiceId, {
       text: script,

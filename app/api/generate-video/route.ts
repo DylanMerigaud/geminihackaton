@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fal } from "@fal-ai/client";
-import { writeFile } from "fs/promises";
+import { writeFile, readFile } from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 
@@ -23,15 +23,19 @@ export async function POST(req: NextRequest) {
     console.log(`📝 Prompt: ${prompt.substring(0, 100)}...`);
     console.log(`🖼️  Frame: ${frameUrl}`);
 
-    // Construct the full URL for the image
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `http://localhost:3000`;
-    const imageUrl = `${baseUrl}${frameUrl}`;
+    // Read the frame file and convert to base64 data URI for fal.ai
+    const framePath = path.join(process.cwd(), "public", frameUrl);
+    const frameBuffer = await readFile(framePath);
+    const base64Image = frameBuffer.toString("base64");
+    const imageDataUri = `data:image/png;base64,${base64Image}`;
+
+    console.log(`📦 Using Data URI for image (${base64Image.length} chars)`);
 
     // Use fal.ai Veo 3.1 for image-to-video
     const result = await fal.subscribe("fal-ai/veo3.1/fast/image-to-video", {
       input: {
         prompt: `${prompt}. No music. No audio. No dialogue. Ultra dynamic motion.`,
-        image_url: imageUrl,
+        image_url: imageDataUri,
         aspect_ratio: "9:16",
         duration: "4s" as "8s",
         generate_audio: false,

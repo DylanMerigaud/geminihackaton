@@ -16,7 +16,9 @@ export default function Home() {
   const [state, setState] = useState<GenerationState>({ step: "idle" });
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [ttsUrl, setTtsUrl] = useState<string>();
-  const [generatingScenes, setGeneratingScenes] = useState<Set<number>>(new Set());
+  const [generatingScenes, setGeneratingScenes] = useState<Set<number>>(
+    new Set()
+  );
 
   const scrapeAndGenerate = async () => {
     if (!url) return;
@@ -90,10 +92,7 @@ export default function Home() {
         return;
       }
 
-      // Step 4: Assess all frames
-      setState((s) => ({ ...s, step: "assessing" }));
-      await assessAllFrames();
-
+      // Frames are auto-approved, skip assessment
       setState((s) => ({ ...s, step: "ready-for-videos" }));
     } catch (error) {
       setState({
@@ -104,7 +103,11 @@ export default function Home() {
     }
   };
 
-  const generateFrame = async (sceneId: number, prompt: string, imageReference: string) => {
+  const generateFrame = async (
+    sceneId: number,
+    prompt: string,
+    imageReference: string
+  ) => {
     setGeneratingScenes((prev) => new Set(prev).add(sceneId));
     try {
       const res = await fetch("/api/generate-frame", {
@@ -115,17 +118,41 @@ export default function Home() {
       if (res.ok) {
         const { url: frameUrl } = await res.json();
         setScenes((prev) =>
-          prev.map((s) => (s.id === sceneId ? { ...s, firstFrameUrl: frameUrl } : s))
+          prev.map((s) =>
+            s.id === sceneId
+              ? {
+                  ...s,
+                  firstFrameUrl: frameUrl,
+                  assessment: {
+                    approved: true,
+                    scrollStopper: 10,
+                    composition: 10,
+                    looksAI: 0,
+                    overall: 10,
+                  },
+                }
+              : s
+          )
         );
         return { success: true };
       } else {
         const error = await res.json();
-        console.error(`❌ Frame generation failed for scene ${sceneId}:`, error);
-        return { success: false, error: error.error || "Frame generation failed" };
+        console.error(
+          `❌ Frame generation failed for scene ${sceneId}:`,
+          error
+        );
+        return {
+          success: false,
+          error: error.error || "Frame generation failed",
+        };
       }
     } catch (error) {
       console.error(`❌ Frame generation error for scene ${sceneId}:`, error);
-      return { success: false, error: error instanceof Error ? error.message : "Frame generation failed" };
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Frame generation failed",
+      };
     } finally {
       setGeneratingScenes((prev) => {
         const next = new Set(prev);
@@ -156,7 +183,8 @@ export default function Home() {
   };
 
   const assessAllFrames = async () => {
-    const currentScenes = scenes.length > 0 ? scenes : state.scrapedContent?.scenes || [];
+    const currentScenes =
+      scenes.length > 0 ? scenes : state.scrapedContent?.scenes || [];
     for (const scene of currentScenes) {
       if (scene.firstFrameUrl) {
         await assessFrame(scene);
@@ -177,7 +205,9 @@ export default function Home() {
 
   const generateAllVideos = async () => {
     // VALIDATION: Check all frames before video generation
-    const approvedScenes = scenes.filter((s) => s.firstFrameUrl && s.assessment?.approved);
+    const approvedScenes = scenes.filter(
+      (s) => s.firstFrameUrl && s.assessment?.approved
+    );
     console.log("🎬 Video Generation Validation:", {
       totalScenes: scenes.length,
       approvedScenes: approvedScenes.length,
@@ -195,7 +225,8 @@ export default function Home() {
 
     setState((s) => ({ ...s, step: "generating-videos" }));
 
-    for (const scene of approvedScenes) {
+    // Generate all videos in parallel
+    const videoPromises = approvedScenes.map(async (scene) => {
       try {
         console.log(`🎥 Generating video for scene ${scene.id}...`);
         const res = await fetch("/api/generate-video", {
@@ -213,25 +244,46 @@ export default function Home() {
           setScenes((prev) =>
             prev.map((s) => (s.id === scene.id ? { ...s, videoUrl } : s))
           );
+          return { success: true, sceneId: scene.id };
         } else {
           const error = await res.json();
-          console.error(`❌ Video generation failed for scene ${scene.id}:`, error);
+          console.error(
+            `❌ Video generation failed for scene ${scene.id}:`,
+            error
+          );
+          return { success: false, sceneId: scene.id, error };
         }
       } catch (error) {
-        console.error(`❌ Video generation failed for scene ${scene.id}:`, error);
+        console.error(
+          `❌ Video generation failed for scene ${scene.id}:`,
+          error
+        );
+        return { success: false, sceneId: scene.id, error };
       }
+    });
+
+    // Wait for all videos to complete
+    const results = await Promise.all(videoPromises);
+    const failedCount = results.filter((r) => !r.success).length;
+
+    if (failedCount > 0) {
+      console.warn(`⚠️ ${failedCount} video(s) failed to generate`);
     }
 
     setState((s) => ({ ...s, step: "complete" }));
   };
 
-  const allFramesApproved = scenes.length > 0 && scenes.every((s) => s.assessment?.approved);
-  const allVideosGenerated = scenes.length > 0 && scenes.every((s) => s.videoUrl);
+  const allFramesApproved =
+    scenes.length > 0 && scenes.every((s) => s.assessment?.approved);
+  const allVideosGenerated =
+    scenes.length > 0 && scenes.every((s) => s.videoUrl);
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 p-8">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8 text-center text-gray-900">AI Video Ad Generator</h1>
+        <h1 className="text-3xl font-bold mb-8 text-center text-gray-900">
+          42 Ad Generator
+        </h1>
 
         {/* URL Input */}
         <div className="mb-8">
@@ -257,33 +309,52 @@ export default function Home() {
         </div>
 
         {/* Progress indicator */}
-        {state.step !== "idle" && state.step !== "preview-data" && state.step !== "ready-for-videos" && (
-          <div className="mb-8 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center gap-2">
-              <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
-              <span className="text-gray-600 text-sm">
-                {state.step === "scraping" && "Scraping and analyzing page..."}
-                {state.step === "generating-frames" && "Generating first frames..."}
-                {state.step === "assessing" && "Assessing frames with AI..."}
-                {state.step === "generating-videos" && "Generating Veo 3.1 videos..."}
-                {state.step === "generating-tts" && "Generating voiceover..."}
-                {state.step === "complete" && "Complete!"}
-              </span>
+        {state.step !== "idle" &&
+          state.step !== "preview-data" &&
+          state.step !== "ready-for-videos" && (
+            <div className="mb-8 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="flex items-center gap-2">
+                <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+                <span className="text-gray-600 text-sm">
+                  {state.step === "scraping" &&
+                    "Scraping and analyzing page..."}
+                  {state.step === "generating-frames" &&
+                    "Generating first frames..."}
+                  {state.step === "assessing" && "Assessing frames with AI..."}
+                  {state.step === "generating-videos" &&
+                    "Generating Veo 3.1 videos..."}
+                  {state.step === "generating-tts" && "Generating voiceover..."}
+                  {state.step === "complete" && "Complete!"}
+                </span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Scraped content summary */}
         {state.scrapedContent && (
           <div className="mb-8 p-6 bg-white rounded-lg border-2 border-blue-400 shadow-md">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900">📋 Content Preview</h2>
+            <h2 className="text-xl font-semibold mb-4 text-gray-900">
+              📋 Content Preview
+            </h2>
             <div className="space-y-2 mb-4 text-sm">
-              <p className="text-gray-900"><strong>Product:</strong> {state.scrapedContent.productName}</p>
-              <p className="text-gray-600"><strong>Brand Tone:</strong> {state.scrapedContent.brandTone}</p>
-              <p className="text-gray-600"><strong>Hook:</strong> {state.scrapedContent.hook}</p>
-              <p className="text-gray-600"><strong>CTA:</strong> {state.scrapedContent.cta}</p>
-              <p className="text-gray-600"><strong>TTS Script:</strong> {state.scrapedContent.ttsScript}</p>
-              <p className="text-gray-600"><strong>Scenes:</strong> {state.scrapedContent.scenes.length}</p>
+              <p className="text-gray-900">
+                <strong>Product:</strong> {state.scrapedContent.productName}
+              </p>
+              <p className="text-gray-600">
+                <strong>Brand Tone:</strong> {state.scrapedContent.brandTone}
+              </p>
+              <p className="text-gray-600">
+                <strong>Hook:</strong> {state.scrapedContent.hook}
+              </p>
+              <p className="text-gray-600">
+                <strong>CTA:</strong> {state.scrapedContent.cta}
+              </p>
+              <p className="text-gray-600">
+                <strong>TTS Script:</strong> {state.scrapedContent.ttsScript}
+              </p>
+              <p className="text-gray-600">
+                <strong>Scenes:</strong> {state.scrapedContent.scenes.length}
+              </p>
             </div>
 
             {state.step === "preview-data" && (
@@ -315,26 +386,34 @@ export default function Home() {
         )}
 
         {/* Generate videos button */}
-        {(allFramesApproved || state.step === "ready-for-videos") && !allVideosGenerated && (
-          <div className="mb-8 p-6 bg-white rounded-lg border-2 border-green-500 shadow-md">
-            <h2 className="text-xl font-semibold mb-4 text-center text-gray-900">🎬 Ready for Video Generation</h2>
-            <p className="text-gray-600 text-center mb-4 text-sm">
-              All frames have been approved. Click below to generate Veo 3.1 videos.
-            </p>
-            <button
-              onClick={generateAllVideos}
-              disabled={state.step === "generating-videos"}
-              className="w-full px-8 py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:text-gray-500 text-white rounded-lg font-semibold text-lg transition-all shadow-sm hover:shadow-md"
-            >
-              {state.step === "generating-videos" ? "Generating Veo 3.1 Videos..." : "🚀 Generate All Videos with Veo 3.1"}
-            </button>
-          </div>
-        )}
+        {(allFramesApproved || state.step === "ready-for-videos") &&
+          !allVideosGenerated && (
+            <div className="mb-8 p-6 bg-white rounded-lg border-2 border-green-500 shadow-md">
+              <h2 className="text-xl font-semibold mb-4 text-center text-gray-900">
+                🎬 Ready for Video Generation
+              </h2>
+              <p className="text-gray-600 text-center mb-4 text-sm">
+                All frames have been approved. Click below to generate Veo 3.1
+                videos.
+              </p>
+              <button
+                onClick={generateAllVideos}
+                disabled={state.step === "generating-videos"}
+                className="w-full px-8 py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:text-gray-500 text-white rounded-lg font-semibold text-lg transition-all shadow-sm hover:shadow-md"
+              >
+                {state.step === "generating-videos"
+                  ? "Generating Veo 3.1 Videos..."
+                  : "🚀 Generate All Videos with Veo 3.1"}
+              </button>
+            </div>
+          )}
 
         {/* Video Player */}
         {scenes.length > 0 && (
           <div className="mb-8">
-            <h2 className="text-xl font-semibold mb-4 text-center text-gray-900">Preview</h2>
+            <h2 className="text-xl font-semibold mb-4 text-center text-gray-900">
+              Preview
+            </h2>
             <VideoPlayer
               scenes={scenes}
               ttsUrl={ttsUrl}

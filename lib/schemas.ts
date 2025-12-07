@@ -1,11 +1,13 @@
 import { z } from "zod";
 
-// BrightData Product Schema
+// BrightData Product Schema - flexible to handle various response formats
 export const BrightDataProductSchema = z.object({
-  title: z.string(),
+  title: z.string().optional().nullable(),
+  name: z.string().optional().nullable(), // Alternative field for title
   seller_name: z.string().optional().nullable(),
   brand: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
+  product_description: z.string().optional().nullable(), // Alternative field
   initial_price: z.number().optional().nullable(),
   currency: z.string().optional().nullable(),
   availability: z.string().optional().nullable(),
@@ -13,6 +15,7 @@ export const BrightDataProductSchema = z.object({
   categories: z.array(z.string()).optional().default([]),
   asin: z.string().optional().nullable(),
   buybox_seller: z.string().optional().nullable(),
+  buybox_prices: z.any().optional().nullable(),
   rating: z.number().optional().nullable(),
   image: z.string().optional().nullable(),
   image_url: z.string().optional().nullable(),
@@ -35,7 +38,7 @@ export const BrightDataProductSchema = z.object({
     })
     .optional()
     .nullable(),
-});
+}).passthrough(); // Allow additional fields we don't know about
 
 export const BrightDataResponseSchema = z.array(BrightDataProductSchema);
 

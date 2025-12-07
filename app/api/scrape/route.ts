@@ -70,21 +70,37 @@ export async function POST(req: NextRequest) {
     }
 
     const productData = scrapedData[0]; // Get first product
+
+    // Handle flexible field names
+    const title = productData.title || productData.name || "Product";
+    const description = productData.product_description || productData.description || "";
+    const images = productData.images || [];
+    const features = productData.features || [];
+
     console.log("📦 Product data extracted:", {
-      title: productData.title,
+      title,
       brand: productData.brand,
-      imagesCount: productData.images?.length || 0,
-      featuresCount: productData.features?.length || 0,
+      imagesCount: images.length,
+      featuresCount: features.length,
     });
+
+    // Validate we have at least one image
+    if (!images || images.length === 0) {
+      console.error("❌ No product images found in scraped data");
+      return NextResponse.json(
+        { error: "No product images found. Cannot generate ad without product images." },
+        { status: 500 }
+      );
+    }
 
     // Extract only relevant data to avoid overwhelming Gemini with huge variation lists
     const relevantData = {
-      title: productData.title,
+      title,
       brand: productData.brand,
-      description: productData.product_description,
-      features: productData.features,
-      images: productData.images,
-      price: productData.buybox_prices,
+      description,
+      features,
+      images,
+      price: productData.buybox_prices || productData.final_price,
       topReview: productData.customer_says,
       categories: productData.categories,
     };
@@ -122,51 +138,92 @@ Return a JSON object with:
     },
     // ... 5 scenes total
   ],
-  "ttsScript": "Full voiceover script for 20 seconds. Must be under 18 seconds when spoken. Hook -> Features -> CTA structure."
+  "ttsScript": "Full voiceover script that will take approximately 18-20 seconds when spoken at natural pace. Make it conversational and detailed enough to fill the time. Hook -> Features (explain benefits) -> CTA structure. Aim for 45-55 words total."
 }
 
 CRITICAL RULES FOR UGC-STYLE REALISTIC ADS:
 1. REALISTIC SCENES ONLY - No cinematic, graphic designs, or artistic effects
-2. PRODUCT IMAGES ONLY - Choose ONLY images showing the ACTUAL PRODUCT from 'images' array
-   - ✅ USE: Photos of the product itself (t-shirt, item, packaging)
-   - ❌ NEVER USE: Specification sheets, size charts, diagrams, text-heavy images, infographics
-   - Each scene needs a product photo that matches the scene context (flat lay, worn, angled, etc.)
+2. IMAGE REFERENCE: **ALWAYS USE images[0]** - Use ONLY the FIRST image from the images array for ALL 5 scenes
+   - Set "imageReference": images[0] for every single scene
+   - This ensures consistency and uses the main product photo
 3. EVERYDAY CONTEXTS - Product being worn, unboxed, displayed on table, held in hand, used in daily life
 4. NO TEXT/GRAPHICS - Never include text overlays, loading bars, graphic designs, or UI elements in prompts
 5. NAIVE & AUTHENTIC - Think genuine customer testimonial video, not polished commercial
 6. ONE COHESIVE VIDEO - All 5 scenes should flow together as one continuous UGC video
+7. TTS SCRIPT LENGTH - The voiceover should be 45-55 words to fill 18-20 seconds at natural speaking pace (approximately 2.5-3 words per second). Make it conversational with natural pauses.
 
-SCENE STRUCTURE (UGC-style):
-- Scene 1 (Hook): Product being unboxed, held up, or first reveal. Use clearest PRODUCT PHOTO (not spec sheet).
-- Scenes 2-4 (Features): Show product in use, close-ups of features, worn/displayed in everyday setting. Use different PRODUCT PHOTOS that show the item from different angles.
-- Scene 5 (CTA): Product displayed attractively on surface or being used with satisfaction. Use appealing PRODUCT PHOTO angle.
+SCENE STRUCTURE - DIVERSE UGC ADS (Study successful TikTok/Instagram ads):
+Real ads use VARIETY and storytelling. Each scene should be DIFFERENT and progress the story:
 
-IMAGE REFERENCE SELECTION PRIORITY:
-1. First, filter OUT all non-product images (spec sheets, size charts, text graphics)
-2. Then, from remaining PRODUCT PHOTOS, select the one that best matches scene context:
-   - Flat lay scene → use flat lay product photo
-   - Worn/modeled scene → use worn/modeled product photo
-   - Close-up scene → use detailed product photo
-   - Packaging scene → use packaging product photo
+Scene 1 (HOOK - Stop the scroll): imageReference = images[0]
+- Unboxing excitement, product reveal, hand holding product up to camera
+- Or: Product in packaging being opened with authentic reaction
+- Or: Quick product showcase with immediate benefit/feature callout
 
-NANOBANANA PROMPT GUIDELINES:
-- Describe REALISTIC everyday scenes: "T-shirt laid flat on wooden table", "Person wearing the shirt in casual home setting", "Close-up of shirt fabric texture"
-- NEVER mention: graphics, designs on product, text, loading bars, cinematic effects, neon, glowing elements
-- Always specify: realistic lighting (natural light, soft indoor lighting), everyday backgrounds (table, room, outdoors)
-- Focus on: product visibility, realistic textures, authentic presentation
-- Keep it simple and realistic
+Scene 2 (PROOF - Build trust): imageReference = images[0]
+- Close-up of quality details: fabric texture, stitching, material feel
+- Or: Product tag/label showing quality/authenticity
+- Or: Hands touching/feeling the product to show quality
 
-VEO PROMPT GUIDELINES:
-- Subtle movements: slow pan, gentle zoom, slight rotation
-- Realistic camera work: handheld feel, smooth movement
-- NO dramatic effects, NO graphic animations, NO text reveals
+Scene 3 (LIFESTYLE - Show use case): imageReference = images[0]
+- Product being worn in everyday context (mirror selfie, casual outfit)
+- Or: Product in real-life setting (on couch, at coffee shop, outdoors)
+- Or: Product styled with other items (outfit flatlay, lifestyle setting)
 
-EXAMPLES:
-Good: "Vertical 9:16 shot of a black t-shirt laid flat on a light wooden table, natural window lighting, soft shadows, realistic product photography"
-Bad: "Cinematic close-up of graphic design with glowing neon elements and starry background"
+Scene 4 (FEATURE - Highlight benefit): imageReference = images[0]
+- Demonstrate specific feature (stretching fabric, showing pocket, etc.)
+- Or: Multiple angles of product (front, back, detail shot)
+- Or: Product in action/being used
 
-Good: "Person wearing the t-shirt in a casual home setting, natural indoor lighting, authentic everyday moment"
-Bad: "T-shirt floating in space with dynamic graphics and text overlays"
+Scene 5 (CTA - Drive action): imageReference = images[0]
+- Product beautifully displayed, ready to purchase
+- Or: Happy customer wearing/using product with satisfaction
+- Or: Product with clear view, inviting purchase
+
+NANOBANANA PROMPT WRITING - MAKE EACH SCENE UNIQUE:
+Study real successful UGC ads - they vary scenes dramatically:
+
+✅ DIVERSE SCENES (Use variety):
+- "Hands unboxing product from package, excitement, soft natural window light, product emerging from tissue paper"
+- "Extreme close-up of fabric texture, fingers touching material, showing quality, macro photography feel"
+- "Person wearing product looking in bedroom mirror, casual home interior, soft lamp lighting, authentic moment"
+- "Hands demonstrating product feature, showing flexibility/quality, white background, clean product focus"
+- "Product folded neatly on aesthetic table with coffee and plant, Instagram-worthy flat lay, warm lighting"
+
+❌ REPETITIVE SCENES (Avoid):
+- "Product on table" repeated 5 times with slight variations
+- Same camera angle for every scene
+- Same lighting setup throughout
+
+NANOBANANA RULES:
+- Each scene = DIFFERENT camera angle (overhead, eye-level, close-up, full-shot, detail)
+- Each scene = DIFFERENT context (unboxing, detail, lifestyle, feature, display)
+- Each scene = DIFFERENT lighting when natural (window light, lamp, outdoor, soft indoor)
+- NEVER mention text, graphics, overlays, effects
+- Specify hands/people when relevant for authentic UGC feel
+- Describe product state: folded, worn, held, displayed, being touched
+
+VEO PROMPT DIVERSITY:
+- Scene 1: "Hands pulling product from box, subtle unboxing motion, handheld camera feel"
+- Scene 2: "Slow zoom into fabric detail, gentle camera push, revealing texture"
+- Scene 3: "Slight pan following person's movement in mirror, natural handheld sway"
+- Scene 4: "Hands demonstrating feature with gentle rotation, product-focused movement"
+- Scene 5: "Slow dolly forward toward product, drawing viewer in, inviting feel"
+
+EXAMPLES OF DIVERSE AD SEQUENCES:
+✅ T-Shirt Ad Variety:
+1. Hands opening package, pulling out folded shirt
+2. Close-up fingers feeling soft fabric texture
+3. Person trying on shirt in bedroom mirror
+4. Demonstrating shirt fit/stretch with hand pulls
+5. Shirt styled in aesthetic flat lay with lifestyle items
+
+✅ NOT This (too similar):
+1. Shirt on table
+2. Shirt on table from different angle
+3. Shirt on table with different lighting
+4. Shirt on table folded differently
+5. Shirt on table final shot
 
 Return ONLY valid JSON, no markdown.`,
             },

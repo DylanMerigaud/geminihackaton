@@ -19,16 +19,47 @@ export async function POST(req: NextRequest) {
     // Use Google SDK to generate images with Gemini 3 Pro Image
     const ai = getGeminiClient();
 
-    const fullPrompt = `${prompt}\n\nReference style from: ${
-      imageReference || "modern advertising"
-    }. Aspect ratio: 9:16 vertical format. Create a stunning, high-quality ad image.`;
+    // Fetch the reference image to pass it directly
+    let referenceImageData = null;
+    if (imageReference) {
+      try {
+        const imageResponse = await fetch(imageReference);
+        const imageBuffer = await imageResponse.arrayBuffer();
+        referenceImageData = Buffer.from(imageBuffer).toString("base64");
+      } catch (error) {
+        console.warn("⚠️ Could not fetch reference image:", error);
+      }
+    }
+
+    // Build the content parts with image reference
+    const parts: any[] = [];
+
+    if (referenceImageData) {
+      parts.push({
+        inlineData: {
+          data: referenceImageData,
+          mimeType: "image/jpeg",
+        },
+      });
+    }
+
+    parts.push({
+      text: `Using the product image above as reference, create this scene: ${prompt}
+
+IMPORTANT:
+- Use the SAME PRODUCT from the reference image
+- Maintain the product's appearance, colors, and design
+- Only change the scene context, lighting, and background
+- Keep the product recognizable and accurate to the reference
+- 9:16 vertical format, UGC-style realistic photography`,
+    });
 
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-image-preview",
       contents: [
         {
           role: "user",
-          parts: [{ text: fullPrompt }],
+          parts,
         },
       ],
       config: {
