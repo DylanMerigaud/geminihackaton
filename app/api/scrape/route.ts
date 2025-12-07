@@ -71,11 +71,26 @@ export async function POST(req: NextRequest) {
 
     const productData = scrapedData[0]; // Get first product
 
-    // Handle flexible field names
+    // Handle flexible field names and types
     const title = productData.title || productData.name || "Product";
-    const description = productData.product_description || productData.description || "";
+
+    // Description can be string or array, normalize to string
+    let description = "";
+    if (typeof productData.product_description === "string") {
+      description = productData.product_description;
+    } else if (Array.isArray(productData.product_description)) {
+      description = productData.product_description.join(" ");
+    } else if (typeof productData.description === "string") {
+      description = productData.description;
+    }
+
     const images = productData.images || [];
-    const features = productData.features || [];
+
+    // Features can be array or other format, normalize to array
+    let features: string[] = [];
+    if (Array.isArray(productData.features)) {
+      features = productData.features.filter((f: any) => typeof f === "string");
+    }
 
     console.log("📦 Product data extracted:", {
       title,

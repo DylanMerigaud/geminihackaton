@@ -1,13 +1,13 @@
 import { z } from "zod";
 
-// BrightData Product Schema - flexible to handle various response formats
+// BrightData Product Schema - very flexible to handle various response formats
 export const BrightDataProductSchema = z.object({
   title: z.string().optional().nullable(),
   name: z.string().optional().nullable(), // Alternative field for title
   seller_name: z.string().optional().nullable(),
   brand: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
-  product_description: z.string().optional().nullable(), // Alternative field
+  description: z.any().optional().nullable(), // Can be string or other types
+  product_description: z.any().optional().nullable(), // Can be string, array, or other
   initial_price: z.number().optional().nullable(),
   currency: z.string().optional().nullable(),
   availability: z.string().optional().nullable(),
@@ -21,23 +21,10 @@ export const BrightDataProductSchema = z.object({
   image_url: z.string().optional().nullable(),
   final_price: z.number().optional().nullable(),
   variations: z.array(z.any()).optional().default([]),
-  features: z.array(z.string()).optional().default([]),
+  features: z.any().optional().default([]), // Can be array of strings or other format
   images: z.array(z.string()).optional().default([]),
   top_review: z.string().optional().nullable(),
-  customer_says: z
-    .object({
-      text: z.string().optional().nullable(),
-      keywords: z
-        .object({
-          positive: z.array(z.string()).optional().nullable(),
-          negative: z.array(z.string()).optional().nullable(),
-          mixed: z.array(z.string()).optional().nullable(),
-        })
-        .optional()
-        .nullable(),
-    })
-    .optional()
-    .nullable(),
+  customer_says: z.any().optional().nullable(), // Can be object, string, or other
 }).passthrough(); // Allow additional fields we don't know about
 
 export const BrightDataResponseSchema = z.array(BrightDataProductSchema);
