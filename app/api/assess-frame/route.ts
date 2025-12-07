@@ -16,9 +16,9 @@ export async function POST(req: NextRequest) {
     const imageBuffer = await readFile(filepath);
     const base64Image = imageBuffer.toString("base64");
 
-    // Use Gemini 2.5 Pro to assess the frame
+    // Use Gemini 3 Pro to assess the frame (as specified in requirements)
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-05-20",
+      model: "gemini-3-pro-preview",
       contents: [
         {
           role: "user",

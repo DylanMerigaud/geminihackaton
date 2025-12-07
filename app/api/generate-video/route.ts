@@ -1,64 +1,79 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getGeminiClient } from "@/lib/gemini";
+import { fal } from "@fal-ai/client";
 import { writeFile } from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
+
+// Configure fal.ai client
+fal.config({
+  credentials: process.env.FAL_KEY,
+});
 
 export async function POST(req: NextRequest) {
   try {
     const { prompt, frameUrl, sceneId } = await req.json();
     if (!prompt || !frameUrl) {
-      return NextResponse.json({ error: "Prompt and frameUrl required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Prompt and frameUrl required" },
+        { status: 400 }
+      );
     }
 
-    const ai = getGeminiClient();
+    console.log(`🎬 Generating video for scene ${sceneId} with Veo 3.1`);
+    console.log(`📝 Prompt: ${prompt.substring(0, 100)}...`);
+    console.log(`🖼️  Frame: ${frameUrl}`);
 
-    // Read the first frame image
-    const { readFile: readFileAsync } = await import("fs/promises");
-    const filepath = path.join(process.cwd(), "public", frameUrl);
-    const imageBuffer = await readFileAsync(filepath);
-    const base64Image = imageBuffer.toString("base64");
+    // Construct the full URL for the image
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `http://localhost:3000`;
+    const imageUrl = `${baseUrl}${frameUrl}`;
 
-    // Use Veo 2 for image-to-video (Veo 3.1 not yet available via API, using veo-2.0-generate-001)
-    const operation = await ai.models.generateVideos({
-      model: "veo-2.0-generate-001",
-      prompt: `${prompt}. No music. No audio. No dialogue. Ultra dynamic motion.`,
-      image: {
-        imageBytes: base64Image,
-        mimeType: "image/png",
+    // Use fal.ai Veo 3.1 for image-to-video
+    const result = await fal.subscribe("fal-ai/veo3.1/fast/image-to-video", {
+      input: {
+        prompt: `${prompt}. No music. No audio. No dialogue. Ultra dynamic motion.`,
+        image_url: imageUrl,
+        aspect_ratio: "9:16",
+        duration: "4s" as "8s",
+        generate_audio: false,
+        resolution: "720p",
       },
-      config: {
-        aspectRatio: "9:16",
-        durationSeconds: 4,
+      logs: true,
+      onQueueUpdate: (update) => {
+        if (update.status === "IN_PROGRESS") {
+          update.logs.map((log) => log.message).forEach(console.log);
+        }
       },
     });
 
-    // Poll for completion
-    let result = operation;
-    while (!result.done) {
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-      result = await ai.operations.getVideosOperation({
-        operation: result,
-      });
+    console.log("✅ Video generation complete");
+    console.log("Request ID:", result.requestId);
+
+    if (!result.data?.video?.url) {
+      throw new Error("No video URL returned from fal.ai");
     }
 
-    if (!result.response?.generatedVideos?.[0]?.video?.videoBytes) {
-      throw new Error("No video generated");
-    }
+    // Download the video from fal.ai
+    const videoResponse = await fetch(result.data.video.url);
+    const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
 
-    const videoData = result.response.generatedVideos[0].video.videoBytes;
+    // Save to public folder
     const filename = `video_${sceneId}_${uuidv4()}.mp4`;
     const videoPath = path.join(process.cwd(), "public", "videos", filename);
-    await writeFile(videoPath, Buffer.from(videoData, "base64"));
+    await writeFile(videoPath, videoBuffer);
+
+    console.log(`✅ Video saved: /videos/${filename}`);
 
     return NextResponse.json({
       url: `/videos/${filename}`,
       sceneId,
     });
   } catch (error) {
-    console.error("Generate video error:", error);
+    console.error("❌ Generate video error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Video generation failed" },
+      {
+        error:
+          error instanceof Error ? error.message : "Video generation failed",
+      },
       { status: 500 }
     );
   }
